@@ -1,0 +1,30 @@
+name: Kaizon-X Hourly Run
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs every hour
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  run-kaizon-x:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Create .env file
+      run: | 
+        echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" > .env
+
+    - name: Run Kaizon-X engine
+      run: python3 engine.py
+      
