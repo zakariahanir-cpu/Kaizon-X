@@ -2,14 +2,14 @@ name: Kaizon-X Hourly Run
 
 on:
   schedule:
-    - cron: '0 * * * *' # تشغيل كل ساعة
-  workflow_dispatch: # تشغيل يدوي
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   run-kaizon-x:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # إذن الكتابة في المستودع ضروري لحفظ الذاكرة
+      contents: write
 
     steps:
     - name: Checkout repository
@@ -34,10 +34,18 @@ jobs:
       run: |
         git config --global user.name "Kaizon-X Bot"
         git config --global user.email "bot@kaizon-x.ai"
-        git add kaizon_memory.json
-        git add exec_evolution_*.py
-        git add self_optimizer_v2.py
-        git commit -m "Update memory and evolved code [skip ci]" || echo "No changes to commit"
+        
+        # إضافة ملف الذاكرة
+        if [ -f kaizon_memory.json ]; then git add kaizon_memory.json; fi
+        
+        # إضافة جميع ملفات الإصدارات الجديدة kaizon_v*.py
+        # نستخدم find لتجنب خطأ "did not match any files" إذا لم توجد ملفات جديدة
+        find . -maxdepth 1 -name "kaizon_v*.py" -exec git add {} +
+        
+        # إضافة ملفات المحسن إذا وجدت
+        if [ -f self_optimizer_v2.py ]; then git add self_optimizer_v2.py; f i
+        
+        git commit -m "Update memory and evolved versions [skip ci]" || echo "No changes to commit"
         git push
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
