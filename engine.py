@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 from agents.architect import Architect
 from agents.coder import Coder
@@ -13,7 +14,6 @@ from utils.test_runner import TestRunner
 class SwarmEngine:
     def __init__(self, groq_api_key):
         self.api_key = groq_api_key
-        # تهيئة العملاء بنماذج مختلفة حسب الحاجة (70b للمهام المعقدة و 8b للمهام السريعة)
         self.client_70b = GroqClient(api_key=groq_api_key, model="llama-3.1-70b-versatile")
         self.client_8b = GroqClient(api_key=groq_api_key, model="llama-3.1-8b-instant")
         
@@ -25,109 +25,90 @@ class SwarmEngine:
         self.test_runner = TestRunner(groq_api_key)
         self.optimizer = None
         self.short_memory = ShortTermMemory()
-        self.long_memory = LongTermMemory()
+        self.long_memory = LongTermMemory(storage_path="kaizon_memory.json")
 
     def activate_co_evolution(self):
-        """تفعيل وكيل التحسين الذاتي لبدء بروتوكول التطور التشاركي"""
         print("\n[نظام] !!! تفعيل بروتوكول التطور التشاركي المتزامن !!!")
         self.optimizer = SelfOptimizer(self.client_70b)
 
-    def run_synchronous_cycle(self, goal):
-        """تشغيل دورة كاملة للوكلاء لتحقيق الهدف المحدد"""
-        print(f"\n--- بدء دورة التطور التشاركي: {goal} ---")
+    def run_learning_and_evolution_cycle(self, goal):
+        """دورة التعلم أولاً ثم التطوير التراكمي"""
+        print(f"\n--- [مرحلة 1: التعلم وجمع الخبرات] الهدف: {goal} ---")
         
-        # 1. البحث والتخطيط
-        print(f"[{self.researcher.role}] جاري البحث عن أفضل الحلول لـ: {goal}...")
-        research = self.researcher.research(goal)
-        self.short_memory.add_research_report(research)
+        # 1. البحث عن أفضل الممارسات والخبرات
+        research_query = f"أفضل التقنيات والهياكل البرمجية لبناء {goal} مع دعم التعلم الذاتي"
+        research_report = self.researcher.research(research_query)
+        self.short_memory.add_research_report(research_report)
         
-        print(f"[{self.architect.role}] جاري إنشاء الخطة المعمارية (Blueprint)...")
-        plan = self.architect.generate_blueprint("حالة متطورة", goal, research)
+        # تخزين الخبرة في الذاكرة الطويلة لاستخدامها مستقبلاً
+        knowledge_key = f"knowledge_{len(self.long_memory.memory['history'])}"
+        self.long_memory.update_knowledge(knowledge_key, research_report)
+        print(f"[الذاكرة] تم حفظ خبرة جديدة في قاعدة المعرفة: {knowledge_key}")
+
+        # 2. استرجاع آخر كود مستقر (إذا وجد) للتطوير عليه
+        current_code = "لا يوجد كود سابق، ابدأ من الصفر."
+        last_filename = None
+        if self.long_memory.memory["approved_code"]:
+            # الحصول على آخر ملف تم اعتماده
+            last_filename = list(self.long_memory.memory["approved_code"].keys())[-1]
+            current_code = self.long_memory.memory["approved_code"][last_filename]
+            print(f"[النظام] تم العثور على نسخة سابقة للتطوير: {last_filename}")
+
+        print(f"\n--- [مرحلة 2: التخطيط والبرمجة بناءً على الخبرات] ---")
+        
+        # 3. التخطيط المعماري المدمج بالخبرات
+        system_state = f"النسخة الحالية: {last_filename if last_filename else 'Initial'}"
+        plan = self.architect.generate_blueprint(system_state, goal, research_report)
         self.short_memory.update_blueprint(plan)
+
+        # 4. البرمجة التراكمية
+        code = self.coder.write_code(plan, current_code, "يرجى دمج الخبرات الجديدة في الكود الحالي وتطويره.")
         
-        # 2. البرمجة
-        print(f"[{self.coder.role}] جاري كتابة الكود البرمجي بناءً على الخطة...")
-        code = self.coder.write_code(plan, "كود الوكيل المطور الحالي", "لا توجد ملاحظات سابقة")
-        
-        # 3. الاختبار التنفيذي (Live API Test)
-        print(f"[الاختبار] جاري تشغيل الكود المطور واختبار اتصاله بـ Groq API...")
+        # 5. الاختبار التنفيذي
+        print(f"[الاختبار] جاري فحص الكود المطور...")
         success, test_message = self.test_runner.run_code_test(code)
         print(f"[النتيجة] {test_message}")
 
-        # 4. المراجعة والاعتماد
-        print(f"[{self.reviewer.role}] جاري مراجعة الكود ونتائج الاختبار...")
+        # 6. المراجعة والاعتماد
         review = self.reviewer.review_code(code, test_message)
         self.short_memory.add_review(review)
         
         if "APPROVE" in review.upper():
-            print("\n[موافقة] ✅ تم اعتماد الكود بنجاح بعد اجتياز الاختبارات.")
+            print("\n[موافقة] ✅ تم اعتماد النسخة المطورة.")
             
-            # 5. التطور الذاتي وتحسين السرب (إذا كان المحسن مفعلاً)
+            # 7. التطور الذاتي (تحسين الموجهات)
             if self.optimizer:
-                print(f"[{self.optimizer.role}] جاري تحسين السرب وتطوير الذات...")
-                
-                # تحسين وكيل آخر (كمثال: المهندس المعماري)
-                optimized_architect_prompt = self.optimizer.optimize_swarm_agent("Architect", self.architect.system_prompt)
-                print(f"[تحسين] تم تحديث منطق 'Architect' للوصول لمرحلة استقرار أعلى.")
-                
-                # تطوير الذات (المحسن يطور كوده الخاص)
-                self_improvement = self.optimizer.generate_self_improvement(code)
-                self.long_memory.store_code("self_optimizer_v2.py", self_improvement)
-                print(f"[تطور] تم حفظ نسخة مطورة من المحسن الذاتي.")
+                print(f"[{self.optimizer.role}] جاري تحسين منطق السرب...")
+                optimized_prompt = self.optimizer.optimize_swarm_agent("Architect", self.architect.system_prompt)
+                self.long_memory.update_knowledge("stable_architect_prompt", optimized_prompt)
 
-            # حفظ النتائج في الذاكرة طويلة المدى
-            self.long_memory.add_to_history(f"دورة ناجحة: {goal}")
-            filename = f"exec_evolution_{len(self.long_memory.memory['history'])}.py"
-            self.long_memory.store_code(filename, code)
+            # حفظ النسخة الجديدة
+            self.long_memory.add_to_history(f"تطوير ناجح: {goal} بناءً على خبرة {knowledge_key}")
+            new_filename = f"kaizon_v{len(self.long_memory.memory['history'])}.py"
             
-            print(f"[الذاكرة] تم حفظ الكود المعتمد في: {filename}")
+            # كتابة الملف فعلياً على القرص لـ Git
+            with open(new_filename, "w") as f:
+                f.write(code)
+                
+            self.long_memory.store_code(new_filename, code)
+            print(f"[الذاكرة] تم حفظ النسخة المستقرة الجديدة: {new_filename}")
             return "SUCCESS"
         
         else:
-            print("\n[رفض] ❌ لم يتم اعتماد الكود بسبب فشل الاختبارات أو المراجعة.")
-            self.long_memory.add_to_history(f"دورة مرفوضة: {goal}")
+            print("\n[رفض] ❌ النسخة لم تحقق معايير الاستقرار، سيتم إعادة المحاولة في الدورة القادمة.")
+            self.long_memory.add_to_history(f"فشل تطوير: {goal}")
             return "REJECTED"
 
-    def get_status(self):
-        return {
-            "history_count": len(self.long_memory.memory["history"]),
-            "is_co_evolving": self.optimizer is not None,
-            "approved_codes": list(self.long_memory.memory["approved_code"].keys())
-        }
-
-# --- نقطة الانطلاق التنفيذية (Entry Point) ---
 if __name__ == "__main__":
-    # تحميل مفتاح API من ملف .env
     load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
-
     if not api_key:
-        print("❌ خطأ: لم يتم العثور على GROQ_API_KEY في ملف .env أو متغيرات البيئة.")
+        print("❌ GROQ_API_KEY مفقود!")
     else:
-        # 1. تهيئة المحرك
         engine = SwarmEngine(api_key)
-        
-        # 2. تفعيل بروتوكول التطور (المحسن الذاتي)
         engine.activate_co_evolution()
         
-        # 3. تحديد الهدف الأساسي: تطوير وكيل تعلم ذاتي مستقر
-        # هذا الهدف يوجه السرب للتركيز على استقرار الوكلاء وتطوير قدراتهم الذاتية
-        evolution_goal = (
-            "تطوير وكيل تعلم ذاتي مستقر (Stable Self-Learning Agent) "
-            "قادر على تحليل أدائه الخاص، تصحيح أخطائه برمجياً، "
-            "وتحديث منطق تفكيره (Prompts) لتحقيق أعلى درجات الكفاءة في السرب."
-        )
-        
-        # 4. بدء التنفيذ
-        result = engine.run_synchronous_cycle(evolution_goal)
-        
-        # 5. عرض التقرير النهائي للدورة
-        print("\n" + "="*50)
-        print("تقرير نهاية الدورة:")
-        status = engine.get_status()
-        print(f"- حالة الدورة: {result}")
-        print(f"- عدد الدورات الإجمالي: {status['history_count']}")
-        print(f"- هل التطور التشاركي نشط؟: {'نعم' if status['is_co_evolving'] else 'لا'}")
-        print(f"- الأكواد التي تم اعتمادها وحفظها: {status['approved_codes']}")
-        print("="*50)
+        # الهدف الآن هو "التعلم ثم البناء والتطوير"
+        goal = "وكيل تعلم ذاتي متكامل وقادر على إدارة مهامه وتطوير كوده بشكل مستقل"
+        engine.run_learning_and_evolution_cycle(goal)
         
